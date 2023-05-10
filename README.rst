@@ -878,6 +878,36 @@ This client exposes additional settings:
 
 - ``CACHE_HERD_TIMEOUT``: Set default herd timeout. (Default value: 60s)
 
+Cluster client
+^^^^^^^^^^^^^^
+
+This pluggable client defaults to using the ``RedisCluster`` client from
+redis-py (introduced in redis-py v4.1.0) in order to connect to a horizontally
+scaled Redis Cluster.
+
+Like previous pluggable clients, it inherits all functionality from the default
+client. Because of the differences between the basic Redis client and the
+``RedisCluster`` client, we will also enforce a default connection-factory class
+here, ``django_redis.pool.ClusterConnectionFactory``, and ignore the
+application-wide ``DJANGO_REDIS_CONNECTION_FACTORY`` setting.
+
+.. code-block:: python
+
+    CACHES = {
+        "default": {
+            "BACKEND": "django_redis.cache.RedisCache",
+            "LOCATION": "redis://127.0.0.1:6379/1",
+            "OPTIONS": {
+                "CLIENT_CLASS": "django_redis.client.ClusterClient",
+            }
+        }
+    }
+
+The ``django_redis.client.ClusterClient`` doesn't implement any cluster-specific
+commands directly, but if you need the underlying redis-py ``RedisCluster``
+client it is accessible via the ``get_redis_client(...)`` utility.
+
+
 Pluggable serializer
 ~~~~~~~~~~~~~~~~~~~~
 
