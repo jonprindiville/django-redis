@@ -1,3 +1,5 @@
+import threading
+from copy import deepcopy
 from typing import Dict
 from urllib.parse import parse_qs, urlparse
 
@@ -5,6 +7,7 @@ from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from django.utils.module_loading import import_string
 from redis import Redis
+from redis.cluster import RedisCluster
 from redis.connection import DefaultParser, to_bool
 from redis.sentinel import Sentinel
 
@@ -128,6 +131,67 @@ class ConnectionFactory:
             pool.reset()
 
         return pool
+
+
+class ClusterConnectionFactory(ConnectionFactory):
+    """A connection factory compatible with redis.cluster.RedisCluster
+
+    The cluster client manages connection pools internally, so we don't want to
+    do it at this level like the base ConnectionFactory does.
+    """
+
+    # A global cache of URL->client so that within a process, we will reuse a
+    # single client, and therefore a single set of connection pools.
+    _clients = {}
+    _clients_lock = threading.Lock()
+
+    def __init__(self, options):
+        # set appropriate default, but allow overriding client class
+        options.setdefault("REDIS_CLIENT_CLASS", "redis.cluster.RedisCluster")
+        super().__init__(options)
+
+    def connect(self, url: str) -> RedisCluster:
+        """Given a connection url, return a client instance.
+
+        Prefer to return from our cache but if we don't yet have one build it
+        to populate the cache.
+        """
+        if url not in self._clients:
+            with self._clients_lock:
+                if url not in self._clients:
+                    self._clients[url] = self._connect(url)
+        return self._clients[url]
+
+    def _connect(self, url: str) -> RedisCluster:
+        """
+        Given a connection url, return a new client instance.
+
+        Basic django-redis ConnectionFactory manages a cache of connection
+        pools and builds a fresh client each time. because the cluster client
+        manages its own connection pools, we will instead merge the
+        "connection" and "client" kwargs and throw them all at the client to
+        sort out.
+
+        If we find conflicting client and connection kwargs, we'll raise an
+        error.
+        """
+        # Get connection and client kwargs...
+        connection_params = self.make_connection_params(url)
+        client_cls_kwargs = deepcopy(self.redis_client_cls_kwargs)
+
+        # ... and smash 'em together (crashing if there's conflicts)...
+        for key, value in connection_params.items():
+            if key in client_cls_kwargs:
+                raise ImproperlyConfigured(
+                    f"Found '{key}' in both the connection and the client kwargs"
+                )
+            client_cls_kwargs[key] = value
+
+        # ... and then build and return the client
+        return self.redis_client_cls(**client_cls_kwargs)
+
+    def disconnect(self, connection: RedisCluster):
+        connection.disconnect_connection_pools()
 
 
 class SentinelConnectionFactory(ConnectionFactory):
