@@ -142,7 +142,7 @@ class ClusterConnectionFactory(ConnectionFactory):
 
     # A global cache of URL->client so that within a process, we will reuse a
     # single client, and therefore a single set of connection pools.
-    _clients = {}
+    _clients: Dict[str, RedisCluster] = {}
     _clients_lock = threading.Lock()
 
     def __init__(self, options):
