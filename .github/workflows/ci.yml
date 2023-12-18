@@ -4,6 +4,7 @@ on: [push, pull_request]
 
 jobs:
   test:
+    if: github.repository == 'jazzband/django-redis'
     name: >
       Test Python ${{ matrix.python-version }},
       Django ${{ matrix.django-version }},
@@ -104,6 +105,7 @@ jobs:
           PYTHON: ${{ matrix.python-version }}
 
   lint:
+    if: github.repository == 'jazzband/django-redis'
     name: Lint (${{ matrix.tool }})
     runs-on: ubuntu-latest
 
@@ -151,6 +153,7 @@ jobs:
           flags: mypy
 
   check-changelog:
+    if: github.repository == 'jazzband/django-redis'
     name: Check for news fragments in 'changelog.d/'
     runs-on: ubuntu-latest
 
